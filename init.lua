@@ -1,20 +1,58 @@
---[[
-Copyright (C) 2023
-Atlante/Zoldrexs
-atlanteetdocteur@gmail.com
+local world_path = minetest.get_worldpath()
 
-                      GNU GENERAL PUBLIC LICENSE
-                       Version 3, 29 June 2007
+local function ensure_directory(path)
+    if not minetest.mkdir(path) then
+        return false, "Unable to create directory: " .. path
+    end
+    return true
+end
 
- Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
- Everyone is permitted to copy and distribute verbatim copies
- of this license document, but changing it is not allowed.
+local function read_file(path)
+    local file = io.open(path, "r")
+    if not file then
+        return nil
+    end
+    local content = file:read("*all")
+    file:close()
+    return content
+end
 
-                            Preamble
+local function write_file(path, content)
+    local file = io.open(path, "w")
+    if not file then
+        return false
+    end
+    file:write(content)
+    file:close()
+    return true
+end
 
-  The GNU General Public License is a free, copyleft license for
-software and other kinds of works.
-]]
+local function create_npc(name, skin, pos)
+    local npc_path = world_path .. "/npc/"
+    if not ensure_directory(npc_path) then
+        return false, "[Server] -!- Unable to create folder for npc."
+    end
+
+    local filename = npc_path .. "npc_" .. name .. ".txt"
+    if read_file(filename) then
+        return false, "[Server] -!- An npc with this name already exists."
+    end
+
+    if not write_file(filename, "") then
+        return false, "[Server] -!- Failed to create file for npc."
+    end
+
+    local npc_entity = minetest.add_entity(pos, "npc:npc")
+    if npc_entity then
+        local npc = npc_entity:get_luaentity()
+        npc.skin = skin
+        npc.npc_name = name
+        npc:set_texture(skin)
+        return true, "[Server] -!- npc '" .. name .. "' created successfully"
+    else
+        return false, "[Server] -!- Error creating the npc."
+    end
+end
 
 minetest.register_entity("npc:npc", {
     initial_properties = {
@@ -55,7 +93,7 @@ minetest.register_entity("npc:npc", {
     on_activate = function(self, staticdata, dtime_s)
         if staticdata then
             local data = minetest.deserialize(staticdata)
-                self.object:set_armor_groups({immortal = 1})
+            self.object:set_armor_groups({immortal = 1})
             if data and data.skin then
                 self.skin = data.skin
                 self:set_texture(self.skin)
@@ -82,13 +120,8 @@ minetest.register_entity("npc:npc", {
         if data and data.nametag and data.skin then
             local npc_name = data.nametag
             local skin = data.skin
-            local npc_path = minetest.get_worldpath() .. "/npc/npc_" .. npc_name .. ".txt"
-            local file = io.open(npc_path, "r")
-            local file_content = ""
-            if file then
-                file_content = file:read("*all")
-                io.close(file)
-            end
+            local npc_path = world_path .. "/npc/npc_" .. npc_name .. ".txt"
+            local file_content = read_file(npc_path) or ""
 
             local button_give = ""
             local button_tp = ""
@@ -153,38 +186,6 @@ minetest.register_entity("npc:npc", {
     end,
 })
 
-local function create_npc(name, skin, pos)
-    local npc_path = minetest.get_worldpath() .. "/npc/"
-    if not minetest.mkdir(npc_path) then
-        return false, minetest.colorize("#74f016", "[Server] -!- Unable to create folder for npc.")
-    end
-
-    local filename = npc_path .. "npc_" .. name .. ".txt"
-    local file = io.open(filename, "r")
-    if file then
-        io.close(file)
-        return false, minetest.colorize("#74f016", "[Server] -!- An npc with this name already exists.")
-    end
-
-    file = io.open(filename, "w")
-    if not file then
-        return false, minetest.colorize("#74f016", "[Server] -!- Failed to create file for npc.")
-    end
-    file:write("")
-    io.close(file)
-
-    local npc_entity = minetest.add_entity(pos, "npc:npc", name)
-    if npc_entity then
-        local npc = npc_entity:get_luaentity()
-        npc.skin = skin
-        npc.npc_name = name
-        npc:set_texture(skin)
-        return true, minetest.colorize("#74f016", "[Server] -!- npc '" .. name .. "' created successfully")
-    else
-        return false, minetest.colorize("#74f016", "[Server] -!- Error creating the npc.")
-    end
-end
-
 minetest.register_chatcommand("cr_npc", {
     params = "<npc_skin.png> <npc_name>",
     privs = {ban = true},
@@ -198,10 +199,10 @@ minetest.register_chatcommand("cr_npc", {
                 local success, message = create_npc(npc_name, skin, pos)
                 minetest.chat_send_player(name, message)
             else
-                minetest.chat_send_player(name, minetest.colorize("#74f016", "[Server] -!- Unable to find your location."))
+                minetest.chat_send_player(name, "[Server] -!- Unable to find your location.")
             end
         else
-            minetest.chat_send_player(name, minetest.colorize("#74f016", "[Server] -!- Incorrect use of the command. Usage: /cr_npc <npc_skin.png> <npc_name>"))
+            minetest.chat_send_player(name, "[Server] -!- Incorrect use of the command. Usage: /cr_npc <npc_skin.png> <npc_name>")
         end
     end,
 })
@@ -215,13 +216,8 @@ minetest.register_chatcommand("ed_npc", {
         if npc_name then
             local player = minetest.get_player_by_name(name)
             if player then
-                local npc_path = minetest.get_worldpath() .. "/npc/npc_" .. npc_name .. ".txt"
-                local file = io.open(npc_path, "r")
-                local file_content = ""
-                if file then
-                    file_content = file:read("*all")
-                    io.close(file)
-                end
+                local npc_path = world_path .. "/npc/npc_" .. npc_name .. ".txt"
+                local file_content = read_file(npc_path) or ""
 
                 minetest.show_formspec(name, "npc_edit:" .. npc_name,
                     "size[8,6]" ..
@@ -232,10 +228,10 @@ minetest.register_chatcommand("ed_npc", {
                     "label[0.25,-0.07;" .. minetest.colorize("orange","Editing text of the named npc: " .. npc_name .. "]")
                 )
             else
-                minetest.chat_send_player(name, minetest.colorize("#74f016", "[Server] -!- Unable to find your location."))
+                minetest.chat_send_player(name, "[Server] -!- Unable to find your location.")
             end
         else
-            minetest.chat_send_player(name, minetest.colorize("#74f016", "[Server] -!- Incorrect use of the command. Usage: /edit_npc <npc_name>"))
+            minetest.chat_send_player(name, "[Server] -!- Incorrect use of the command. Usage: /ed_npc <npc_name>")
         end
     end,
 })
@@ -244,14 +240,11 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
     if formname:find("^npc_edit:") and fields.save then
         local npc_name = formname:sub(10)
         local edit_content = fields.edit_content or ""
-        local npc_path = minetest.get_worldpath() .. "/npc/npc_" .. npc_name .. ".txt"
-        local file = io.open(npc_path, "w")
-        if file then
-            file:write(edit_content)
-            io.close(file)
-            minetest.chat_send_player(player:get_player_name(), minetest.colorize("#74f016", "[Server] -!- NPC file saved successfully."))
+        local npc_path = world_path .. "/npc/npc_" .. npc_name .. ".txt"
+        if write_file(npc_path, edit_content) then
+            minetest.chat_send_player(player:get_player_name(), "[Server] -!- NPC file saved successfully.")
         else
-            minetest.chat_send_player(player:get_player_name(), minetest.colorize("#74f016", "[Server] -!- Error saving NPC file."))
+            minetest.chat_send_player(player:get_player_name(), "[Server] -!- Error saving NPC file.")
         end
     end
 end)
@@ -273,12 +266,12 @@ minetest.register_chatcommand("dl_npc", {
                 end
             end
             if deleted then
-                minetest.chat_send_player(name, minetest.colorize("#74f016", "[Server] -!- NPC '" .. npc_name .. "' deleted successfully."))
+                minetest.chat_send_player(name, "[Server] -!- NPC '" .. npc_name .. "' deleted successfully.")
             else
-                minetest.chat_send_player(name, minetest.colorize("#ff0000", "[Server] -!- NPC '" .. npc_name .. "' not found."))
+                minetest.chat_send_player(name, "[Server] -!- NPC '" .. npc_name .. "' not found.")
             end
         else
-            minetest.chat_send_player(name, minetest.colorize("#74f016", "[Server] -!- Incorrect use of the command. Usage: /dl_npc <npc_name>"))
+            minetest.chat_send_player(name, "[Server] -!- Incorrect use of the command. Usage: /dl_npc <npc_name>")
         end
     end,
 })
